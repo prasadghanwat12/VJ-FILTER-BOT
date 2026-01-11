@@ -27,22 +27,18 @@ async def start(client, message):
     except:
         pass
     if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-        buttons = [
-    [
-        InlineKeyboardButton(
-            'Join BUYM',
-            url=f'https://t.me/Brighten_Up_Your_Mind'
-        )
-    ],
-    [
-        InlineKeyboardButton(
-            'Support us at Insta',
-            url='https://www.instagram.com/brighten_up_your_mind'
-        )
-    ]
-]
-
-reply_markup = InlineKeyboardMarkup(buttons)
+        buttons = [[
+            InlineKeyboardButton(
+                'Join BUYM',
+                url='https://t.me/Brighten_Up_Your_Mind'
+            )
+        ], [
+            InlineKeyboardButton(
+                'Support us at Insta',
+                url='https://www.instagram.com/brighten_up_your_mind'
+            )
+        ]]
+        reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(script.START_TXT.format(message.from_user.mention if message.from_user else message.chat.title, temp.U_NAME, temp.B_NAME), reply_markup=reply_markup, disable_web_page_preview=True)
         await asyncio.sleep(2) # 😢 https://github.com/EvamariaTG/EvaMaria/blob/master/plugins/p_ttishow.py#L17 😬 wait a bit, before checking.
         if not await db.get_chat(message.chat.id):
