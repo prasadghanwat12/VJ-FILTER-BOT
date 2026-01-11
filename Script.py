@@ -5,7 +5,8 @@
 class script(object):
     START_TXT = """<b><blockquote>ʜᴇʟʟᴏ {} 👋,</blockquote>
     
-ɪ ᴀᴍ ʟᴀᴛᴇꜱᴛ ᴀᴅᴠᴀɴᴄᴇᴅ ᴀɴᴅ ᴘᴏᴡᴇʀꜰᴜʟ ᴀᴜᴛᴏ ꜰɪʟᴛᴇʀ ʙᴏᴛ. ʏᴏᴜ ᴄᴀɴ ᴜꜱᴇ ᴍᴇ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ ᴛᴏ ᴇᴀʀɴ ᴜɴʟɪᴍɪᴛᴇᴅ ᴍᴏɴᴇʏ...💸</b>"""
+Hey, I am your Book Buddy. ❤️
+Happy to see you here in your Reading Journey.</b>"""
 
     CLONE_START_TXT = """<b><blockquote>ʜᴇʟʟᴏ {}, ᴍʏ ɴᴀᴍᴇ <a href=https://t.me/{}>{}</a></blockquote>
     
@@ -752,4 +753,5 @@ Example:- /set_caption 📕 File Name: {filename}
 
 
     
+
 
