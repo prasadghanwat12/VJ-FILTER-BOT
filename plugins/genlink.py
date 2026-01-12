@@ -2,21 +2,12 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import re
-import os
-import json
-import base64
-import logging
-
+import re, os, json, base64, logging
 from utils import temp
-from pyrogram import Client, filters, enums
-from pyrogram.errors import MessageNotModified
+from pyrogram import filters, Client, enums
 from pyrogram.errors.exceptions.bad_request_400 import (
-    ChannelInvalid,
-    UsernameInvalid,
-    UsernameNotModified
+    ChannelInvalid, UsernameInvalid, UsernameNotModified
 )
-
 from info import ADMINS, LOG_CHANNEL, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE
 from database.ia_filterdb import unpack_new_file_id
 
@@ -32,84 +23,74 @@ async def allowed(_, __, message):
     return False
 
 
-@Client.on_message(filters.command(["link", "plink"]) & filters.create(allowed))
+# ───────────────────────────────
+# 🔹 SINGLE FILE LINK
+# ───────────────────────────────
+@Client.on_message(filters.command(['link', 'plink']) & filters.create(allowed))
 async def gen_link_s(bot, message):
-
-    try:
-        vj = await bot.ask(
-            chat_id=message.from_user.id,
-            text="Now Send Me Your Message Which You Want To Store.",
-            timeout=60
-        )
-    except Exception:
-        return await message.reply("Timeout! Send the command again.")
+    vj = await bot.ask(
+        chat_id=message.from_user.id,
+        text="Now Send Me Your Message Which You Want To Store."
+    )
 
     file_type = vj.media
-
     if file_type not in (
         enums.MessageMediaType.VIDEO,
         enums.MessageMediaType.AUDIO,
         enums.MessageMediaType.DOCUMENT
     ):
-        return await vj.reply("Send only Video / Audio / Document.")
+        return await vj.reply("Send me only video, audio or document.")
 
     if vj.has_protected_content and message.from_user.id not in ADMINS:
         return await vj.reply("This content is protected.")
 
-    file_id = unpack_new_file_id(
-        getattr(vj, file_type.value).file_id
-    )[0]
+    media = getattr(vj, file_type.value)
+    file_id, _ = unpack_new_file_id(media.file_id)
 
-    string = "filep_" if message.text.lower().strip() == "/plink" else "file_"
-    string += file_id
+    prefix = "filep_" if message.text.lower().strip() == "/plink" else "file_"
+    payload = prefix + file_id
 
-    outstr = base64.urlsafe_b64encode(
-        string.encode("ascii")
-    ).decode().strip("=")
+    encoded = base64.urlsafe_b64encode(
+        payload.encode("ascii")
+    ).decode().rstrip("=")
 
     await message.reply(
-        f"Here is your link:\n"
-        f"https://t.me/{temp.U_NAME}?start={outstr}"
+        f"Here is your Link:\n"
+        f"https://t.me/{temp.U_NAME}?start={encoded}"
     )
 
 
-@Client.on_message(filters.command(["batch", "pbatch"]) & filters.create(allowed))
+# ───────────────────────────────
+# 🔹 BATCH FILE LINK
+# ───────────────────────────────
+@Client.on_message(filters.command(['batch', 'pbatch']) & filters.create(allowed))
 async def gen_link_batch(bot, message):
-
     if " " not in message.text:
         return await message.reply(
             "Use correct format.\n"
-            "Example:\n"
-            "<code>/batch https://t.me/VJ_Botz/10 https://t.me/VJ_Botz/20</code>"
+            "Example <code>/batch https://t.me/VJ_Botz/10 https://t.me/VJ_Botz/20</code>"
         )
 
-    parts = message.text.strip().split()
-    if len(parts) != 3:
-        return await message.reply("Invalid format.")
-
-    cmd, first, last = parts
+    cmd, first, last = message.text.split(" ", 2)
 
     regex = re.compile(
         r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?([\w\d_]+)/(\d+)$"
     )
 
-    match = regex.match(first)
-    if not match:
-        return await message.reply("Invalid first link")
+    m1 = regex.match(first)
+    m2 = regex.match(last)
 
-    f_chat_id = match.group(4)
-    f_msg_id = int(match.group(5))
+    if not m1 or not m2:
+        return await message.reply("Invalid Telegram message link.")
+
+    f_chat_id = m1.group(4)
+    l_chat_id = m2.group(4)
+
+    f_msg_id = int(m1.group(5))
+    l_msg_id = int(m2.group(5))
 
     if f_chat_id.isnumeric():
         f_chat_id = int("-100" + f_chat_id)
-
-    match = regex.match(last)
-    if not match:
-        return await message.reply("Invalid last link")
-
-    l_chat_id = match.group(4)
-    l_msg_id = int(match.group(5))
-
     if l_chat_id.isnumeric():
         l_chat_id = int("-100" + l_chat_id)
 
@@ -120,80 +101,70 @@ async def gen_link_batch(bot, message):
         chat_id = (await bot.get_chat(f_chat_id)).id
     except ChannelInvalid:
         return await message.reply(
-            "Private channel/group.\n"
-            "Make me admin first."
+            "This may be a private channel.\n"
+            "Make me admin to index files."
         )
     except (UsernameInvalid, UsernameNotModified):
         return await message.reply("Invalid link.")
     except Exception as e:
         return await message.reply(f"Error: {e}")
 
-    sts = await message.reply(
-        "Generating link...\n"
-        "This may take some time."
-    )
+    sts = await message.reply("Generating batch link, please wait...")
 
+    # ───── FILE STORE CHANNEL (DSTORE)
     if chat_id in FILE_STORE_CHANNEL:
-        string = f"{f_msg_id}_{l_msg_id}_{chat_id}_{cmd.lower().strip()}"
-        b64 = base64.urlsafe_b64encode(
-            string.encode("ascii")
-        ).decode().strip("=")
+        data = f"{f_msg_id}_{l_msg_id}_{chat_id}_{cmd.lower().strip()}"
+        encoded = base64.urlsafe_b64encode(
+            data.encode("ascii")
+        ).decode().rstrip("=")
 
-        try:
-            await sts.edit(
-                f"Here is your link:\n"
-                f"https://t.me/{temp.U_NAME}?start=DSTORE-{b64}"
-            )
-        except MessageNotModified:
-            pass
-        return
+        return await sts.edit(
+            f"Here is your link:\n"
+            f"https://t.me/{temp.U_NAME}?start=DSTORE-{encoded}"
+        )
 
-    outlist = []
-    og_msg = 0
+    # ───── NORMAL BATCH MODE
+    files = []
+    total = 0
 
     async for msg in bot.iter_messages(f_chat_id, l_msg_id, f_msg_id):
-        if msg.empty or msg.service or not msg.media:
+        if not msg.media or msg.empty or msg.service:
             continue
 
-        try:
-            file_type = msg.media
-            file = getattr(msg, file_type.value)
+        media = getattr(msg, msg.media.value)
+        caption = msg.caption.html if msg.caption else ""
 
-            caption = msg.caption.html if msg.caption else ""
+        files.append({
+            "file_id": media.file_id,
+            "caption": caption,
+            "title": getattr(media, "file_name", ""),
+            "size": media.file_size,
+            "protect": cmd.lower().strip() == "/pbatch"
+        })
 
-            outlist.append({
-                "file_id": file.file_id,
-                "caption": caption,
-                "title": getattr(file, "file_name", ""),
-                "size": file.file_size,
-                "protect": cmd.lower().strip() == "/pbatch",
-            })
-            og_msg += 1
+        total += 1
 
-        except Exception:
-            continue
+    if not files:
+        return await sts.edit("No valid media found.")
 
-    json_file = f"batchmode_{message.from_user.id}.json"
+    json_name = f"batchmode_{message.from_user.id}.json"
 
-    with open(json_file, "w+") as f:
-        json.dump(outlist, f)
+    with open(json_name, "w") as f:
+        json.dump(files, f)
 
     post = await bot.send_document(
         LOG_CHANNEL,
-        json_file,
+        json_name,
         file_name="Batch.json",
-        caption="⚠️ Generated for filestore."
+        caption="⚠️ Generated for File Store"
     )
 
-    os.remove(json_file)
+    os.remove(json_name)
 
-    file_id = unpack_new_file_id(post.document.file_id)[0]
+    batch_file_id, _ = unpack_new_file_id(post.document.file_id)
 
-    try:
-        await sts.edit(
-            f"Here is your link:\n"
-            f"Contains `{og_msg}` files.\n"
-            f"https://t.me/{temp.U_NAME}?start=BATCH-{file_id}"
-        )
-    except MessageNotModified:
-        pass
+    await sts.edit(
+        f"Here is your link\n"
+        f"Contains `{total}` files.\n"
+        f"https://t.me/{temp.U_NAME}?start=BATCH-{batch_file_id}"
+    )
