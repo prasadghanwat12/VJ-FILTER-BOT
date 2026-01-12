@@ -17,27 +17,22 @@ from pyrogram.errors.exceptions.bad_request_400 import (
     UsernameNotModified
 )
 
-from info import ADMINS, LOG_CHANNEL, FILE_STORE_CHANNEL
+from info import ADMINS, LOG_CHANNEL, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE
 from database.ia_filterdb import unpack_new_file_id
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-# -------------------- SECURITY: ADMIN ONLY --------------------
-
-async def admin_only(_, __, message):
-    if not message.from_user:
-        return False
-    if message.from_user.id in ADMINS:
+async def allowed(_, __, message):
+    if PUBLIC_FILE_STORE:
         return True
-    await message.reply("❌ This command is for admins only.")
+    if message.from_user and message.from_user.id in ADMINS:
+        return True
     return False
 
 
-# -------------------- SINGLE LINK --------------------
-
-@Client.on_message(filters.command(["link", "plink"]) & filters.create(admin_only))
+@Client.on_message(filters.command(["link", "plink"]) & filters.create(allowed))
 async def gen_link_s(bot, message):
 
     try:
@@ -47,7 +42,7 @@ async def gen_link_s(bot, message):
             timeout=60
         )
     except Exception:
-        return await message.reply("⏳ Timeout! Send the command again.")
+        return await message.reply("Timeout! Send the command again.")
 
     file_type = vj.media
 
@@ -58,16 +53,12 @@ async def gen_link_s(bot, message):
     ):
         return await vj.reply("Send only Video / Audio / Document.")
 
-    # Security: Block protected content
-    if vj.has_protected_content:
-        return await vj.reply("❌ Protected content is not allowed.")
+    if vj.has_protected_content and message.from_user.id not in ADMINS:
+        return await vj.reply("This content is protected.")
 
-    try:
-        file_id = unpack_new_file_id(
-            getattr(vj, file_type.value).file_id
-        )[0]
-    except Exception:
-        return await vj.reply("❌ Failed to process this file.")
+    file_id = unpack_new_file_id(
+        getattr(vj, file_type.value).file_id
+    )[0]
 
     string = "filep_" if message.text.lower().strip() == "/plink" else "file_"
     string += file_id
@@ -82,20 +73,19 @@ async def gen_link_s(bot, message):
     )
 
 
-# -------------------- BATCH LINK --------------------
-
-@Client.on_message(filters.command(["batch", "pbatch"]) & filters.create(admin_only))
+@Client.on_message(filters.command(["batch", "pbatch"]) & filters.create(allowed))
 async def gen_link_batch(bot, message):
 
     if " " not in message.text:
         return await message.reply(
             "Use correct format.\n"
+            "Example:\n"
             "<code>/batch https://t.me/VJ_Botz/10 https://t.me/VJ_Botz/20</code>"
         )
 
     parts = message.text.strip().split()
     if len(parts) != 3:
-        return await message.reply("❌ Invalid format.")
+        return await message.reply("Invalid format.")
 
     cmd, first, last = parts
 
@@ -105,7 +95,7 @@ async def gen_link_batch(bot, message):
 
     match = regex.match(first)
     if not match:
-        return await message.reply("❌ Invalid first link")
+        return await message.reply("Invalid first link")
 
     f_chat_id = match.group(4)
     f_msg_id = int(match.group(5))
@@ -115,7 +105,7 @@ async def gen_link_batch(bot, message):
 
     match = regex.match(last)
     if not match:
-        return await message.reply("❌ Invalid last link")
+        return await message.reply("Invalid last link")
 
     l_chat_id = match.group(4)
     l_msg_id = int(match.group(5))
@@ -124,20 +114,25 @@ async def gen_link_batch(bot, message):
         l_chat_id = int("-100" + l_chat_id)
 
     if f_chat_id != l_chat_id:
-        return await message.reply("❌ Chat IDs do not match.")
+        return await message.reply("Chat IDs do not match.")
 
     try:
         chat_id = (await bot.get_chat(f_chat_id)).id
     except ChannelInvalid:
-        return await message.reply("❌ Private channel. Make me admin first.")
+        return await message.reply(
+            "Private channel/group.\n"
+            "Make me admin first."
+        )
     except (UsernameInvalid, UsernameNotModified):
-        return await message.reply("❌ Invalid link.")
-    except Exception:
-        return await message.reply("❌ Failed to access chat.")
+        return await message.reply("Invalid link.")
+    except Exception as e:
+        return await message.reply(f"Error: {e}")
 
-    sts = await message.reply("Generating link... Please wait.")
+    sts = await message.reply(
+        "Generating link...\n"
+        "This may take some time."
+    )
 
-    # File store mode
     if chat_id in FILE_STORE_CHANNEL:
         string = f"{f_msg_id}_{l_msg_id}_{chat_id}_{cmd.lower().strip()}"
         b64 = base64.urlsafe_b64encode(
@@ -173,7 +168,6 @@ async def gen_link_batch(bot, message):
                 "size": file.file_size,
                 "protect": cmd.lower().strip() == "/pbatch",
             })
-
             og_msg += 1
 
         except Exception:
@@ -181,22 +175,19 @@ async def gen_link_batch(bot, message):
 
     json_file = f"batchmode_{message.from_user.id}.json"
 
-    try:
-        with open(json_file, "w+") as f:
-            json.dump(outlist, f)
+    with open(json_file, "w+") as f:
+        json.dump(outlist, f)
 
-        post = await bot.send_document(
-            LOG_CHANNEL,
-            json_file,
-            file_name="Batch.json",
-            caption="⚠️ Generated for filestore."
-        )
+    post = await bot.send_document(
+        LOG_CHANNEL,
+        json_file,
+        file_name="Batch.json",
+        caption="⚠️ Generated for filestore."
+    )
 
-        file_id = unpack_new_file_id(post.document.file_id)[0]
+    os.remove(json_file)
 
-    finally:
-        if os.path.exists(json_file):
-            os.remove(json_file)
+    file_id = unpack_new_file_id(post.document.file_id)[0]
 
     try:
         await sts.edit(
