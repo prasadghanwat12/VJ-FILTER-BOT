@@ -2,12 +2,20 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import re, os, json, base64, logging
+import re
+import os
+import json
+import base64
+import logging
+
 from utils import temp
-from pyrogram import filters, Client, enums
+from pyrogram import Client, filters, enums
 from pyrogram.errors.exceptions.bad_request_400 import (
-    ChannelInvalid, UsernameInvalid, UsernameNotModified
+    ChannelInvalid,
+    UsernameInvalid,
+    UsernameNotModified
 )
+
 from info import ADMINS, LOG_CHANNEL, FILE_STORE_CHANNEL, PUBLIC_FILE_STORE
 from database.ia_filterdb import unpack_new_file_id
 
@@ -15,6 +23,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+# ───────────────────────────────
+# 🔹 ACCESS CHECK
+# ───────────────────────────────
 async def allowed(_, __, message):
     if PUBLIC_FILE_STORE:
         return True
@@ -45,7 +56,9 @@ async def gen_link_s(bot, message):
         return await vj.reply("This content is protected.")
 
     media = getattr(vj, file_type.value)
-    file_id, _ = unpack_new_file_id(media.file_id)
+
+    # ✅ FIX: unpack safely (take only first value)
+    file_id = unpack_new_file_id(media.file_id)[0]
 
     prefix = "filep_" if message.text.lower().strip() == "/plink" else "file_"
     payload = prefix + file_id
@@ -101,8 +114,7 @@ async def gen_link_batch(bot, message):
         chat_id = (await bot.get_chat(f_chat_id)).id
     except ChannelInvalid:
         return await message.reply(
-            "This may be a private channel.\n"
-            "Make me admin to index files."
+            "This may be a private channel.\nMake me admin to index files."
         )
     except (UsernameInvalid, UsernameNotModified):
         return await message.reply("Invalid link.")
@@ -111,7 +123,7 @@ async def gen_link_batch(bot, message):
 
     sts = await message.reply("Generating batch link, please wait...")
 
-    # ───── FILE STORE CHANNEL (DSTORE)
+    # ───────────────── FILE STORE (DSTORE)
     if chat_id in FILE_STORE_CHANNEL:
         data = f"{f_msg_id}_{l_msg_id}_{chat_id}_{cmd.lower().strip()}"
         encoded = base64.urlsafe_b64encode(
@@ -123,12 +135,12 @@ async def gen_link_batch(bot, message):
             f"https://t.me/{temp.U_NAME}?start=DSTORE-{encoded}"
         )
 
-    # ───── NORMAL BATCH MODE
+    # ───────────────── NORMAL BATCH MODE
     files = []
     total = 0
 
     async for msg in bot.iter_messages(f_chat_id, l_msg_id, f_msg_id):
-        if not msg.media or msg.empty or msg.service:
+        if msg.empty or msg.service or not msg.media:
             continue
 
         media = getattr(msg, msg.media.value)
@@ -161,7 +173,8 @@ async def gen_link_batch(bot, message):
 
     os.remove(json_name)
 
-    batch_file_id, _ = unpack_new_file_id(post.document.file_id)
+    # ✅ FIX: unpack safely
+    batch_file_id = unpack_new_file_id(post.document.file_id)[0]
 
     await sts.edit(
         f"Here is your link\n"
